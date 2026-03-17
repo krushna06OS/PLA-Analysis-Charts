@@ -68,7 +68,7 @@ def generate_rr_charts(df, start_time=None, end_time=None):
             servers = ", ".join(map(str, subset['server'].unique()))
             st.markdown(f"**Chart Label:** `RR | client={client} | page={page} | servers={servers}`")
 
-            plt.figure(figsize=(10, 4))
+            plt.figure(figsize=(14, 5))
 
             for server in subset['server'].unique():
                 server_df = subset[subset['server'] == server]
@@ -86,7 +86,12 @@ def generate_rr_charts(df, start_time=None, end_time=None):
             plt.xlabel("Interval (15 min)")
             plt.ylabel("Response Ratio")
             plt.legend()
-            plt.xticks(rotation=45)
+            ax = plt.gca()
+            ticks = ax.get_xticks()
+            if len(ticks) > 12:
+                step = max(1, len(ticks) // 12)
+                ax.set_xticks(ticks[::step])
+            plt.xticks(rotation=45, ha='right', fontsize=8)
             plt.tight_layout()
 
             st.pyplot(plt)
@@ -126,7 +131,7 @@ def generate_latency_charts(df, start_time=None, end_time=None):
             subset = client_df[client_df['f_pt'] == fpt]
             servers = ", ".join(map(str, subset['server'].unique()))
             st.markdown(f"**Chart Label:** `Latency | client={client} | f_pt={fpt} | servers={servers}`")
-            plt.figure(figsize=(10, 4))
+            plt.figure(figsize=(14, 5))
 
             for server in subset['server'].unique():
                 server_df = subset[subset['server'] == server].sort_values('interval_15_min')
@@ -148,7 +153,12 @@ def generate_latency_charts(df, start_time=None, end_time=None):
             plt.xlabel("Interval (15 min)")
             plt.ylabel("Latency (ms)")
             plt.legend()
-            plt.xticks(rotation=45)
+            ax = plt.gca()
+            ticks = ax.get_xticks()
+            if len(ticks) > 12:
+                step = max(1, len(ticks) // 12)
+                ax.set_xticks(ticks[::step])
+            plt.xticks(rotation=45, ha='right', fontsize=8)
             plt.tight_layout()
 
             st.pyplot(plt)
@@ -193,7 +203,7 @@ def generate_cache_hit_charts(df, start_time=None, end_time=None):
                     f"**Chart Label:** `CacheHit | mcid={client} | f_pt={fpt} | c_type={ctype} | servers={servers}`"
                 )
 
-                plt.figure(figsize=(10, 4))
+                plt.figure(figsize=(14, 5))
 
                 for server in subset['server'].unique():
                     server_df = subset[subset['server'] == server].sort_values('timestamp')
@@ -208,7 +218,12 @@ def generate_cache_hit_charts(df, start_time=None, end_time=None):
                 plt.xlabel("Time (hour)")
                 plt.ylabel("Hit Ratio")
                 plt.legend()
-                plt.xticks(rotation=45)
+                ax = plt.gca()
+                ticks = ax.get_xticks()
+                if len(ticks) > 12:
+                    step = max(1, len(ticks) // 12)
+                    ax.set_xticks(ticks[::step])
+                plt.xticks(rotation=45, ha='right', fontsize=8)
                 plt.tight_layout()
 
                 st.pyplot(plt)
@@ -270,10 +285,15 @@ if uploaded_file:
                 if selected_page != "All":
                     df = df[df['page_type'] == selected_page]
 
-                server_options = ["All"] + sorted(df['server'].unique().tolist())
-                selected_server = st.selectbox("Server", server_options, key="rr_server")
-                if selected_server != "All":
-                    df = df[df['server'] == selected_server]
+                server_options = sorted(df['server'].unique().tolist())
+                selected_servers = st.multiselect(
+                    "Servers",
+                    server_options,
+                    default=server_options,
+                    key="rr_server"
+                )
+                if selected_servers:
+                    df = df[df['server'].isin(selected_servers)]
 
                 df['interval_15_min_str'] = df['interval_15_min'].astype(str)
                 df['interval_15_min'] = pd.to_datetime(df['interval_15_min'], utc=True).dt.tz_convert(None)
@@ -304,10 +324,15 @@ if uploaded_file:
                 if selected_client != "All":
                     df = df[df['marketplace_client_id'] == selected_client]
 
-                server_options = ["All"] + sorted(df['server'].unique().tolist())
-                selected_server = st.selectbox("Server", server_options, key="lat_server")
-                if selected_server != "All":
-                    df = df[df['server'] == selected_server]
+                server_options = sorted(df['server'].unique().tolist())
+                selected_servers = st.multiselect(
+                    "Servers",
+                    server_options,
+                    default=server_options,
+                    key="lat_server"
+                )
+                if selected_servers:
+                    df = df[df['server'].isin(selected_servers)]
 
                 df['interval_15_min_str'] = df['interval_15_min'].astype(str)
                 df['interval_15_min'] = pd.to_datetime(df['interval_15_min'], utc=True).dt.tz_convert(None)
@@ -338,10 +363,15 @@ if uploaded_file:
                 if selected_client != "All":
                     df = df[df['mcid'] == selected_client]
 
-                server_options = ["All"] + sorted(df['server'].unique().tolist())
-                selected_server = st.selectbox("Server", server_options, key="ch_server")
-                if selected_server != "All":
-                    df = df[df['server'] == selected_server]
+                server_options = sorted(df['server'].unique().tolist())
+                selected_servers = st.multiselect(
+                    "Servers",
+                    server_options,
+                    default=server_options,
+                    key="ch_server"
+                )
+                if selected_servers:
+                    df = df[df['server'].isin(selected_servers)]
 
                 df['date_str'] = df['date'].astype(str)
                 df['date'] = pd.to_datetime(df['date'])
