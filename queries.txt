@@ -1,0 +1,162 @@
+RR:
+SELECT
+  DATE(
+    TIMESTAMP(req.timestamp_utc, 'UTC'),
+    req.timezone) AS date,
+  DATETIME_TRUNC(req.timestamp_utc, HOUR) AS date_hour_utc,
+  TIMESTAMP_SECONDS(
+    900 * DIV(UNIX_SECONDS(TIMESTAMP(req.timestamp_utc)), 900))
+    AS interval_15_min,
+  req.mcid AS marketplace_client_id,
+  req.f_pt AS page_type,
+  CASE
+    WHEN served_by LIKE '%beta%v2%' THEN 'beta_v2'
+    WHEN served_by LIKE '%v2%' THEN 'v2'
+    ELSE
+      CASE
+        WHEN served_by LIKE '%beta%' THEN 'beta'
+        ELSE 'prod'
+        END
+    END AS server,
+  COUNT(req.timestamp_utc) AS requests,
+  SUM(
+    CASE
+      WHEN req.r_pcnt > 0 THEN 1
+      ELSE 0
+      END) AS non_zero_responses,
+  SUM(
+    CASE
+      WHEN req.r_pcnt > 0 THEN 1
+      ELSE 0
+      END)
+    * 100
+    / COUNT(req.mcid) AS response_ratio
+FROM
+  `prj-onlinesales-prod-01.reporting_mumbai.os_product_ads_request_report`
+    AS req
+WHERE
+  req.timestamp_utc > '2026-03-16 12:30:00'
+  AND req.mcid IN ('10064078', '10090579')
+GROUP BY
+  1, 2, 3, 4, 5, 6
+ORDER BY
+  1, 2, 3, 4, 5, 6
+
+
+Latency:
+SELECT
+  DATE(req.timestamp_utc) AS date,
+  EXTRACT(HOUR FROM req.timestamp_utc) AS hour,
+  TIMESTAMP_SECONDS(
+    900 * DIV(UNIX_SECONDS(TIMESTAMP(req.timestamp_utc)), 900))
+    AS interval_15_min,
+  req.mcid AS marketplace_client_id,
+  req.f_pt,
+  CASE
+    WHEN served_by LIKE '%beta%v2%' THEN 'beta_v2'
+    WHEN served_by LIKE '%v2%' THEN 'v2'
+    ELSE
+      CASE
+        WHEN served_by LIKE '%beta%' THEN 'beta'
+        ELSE 'prod'
+        END
+    END AS server,
+  APPROX_QUANTILES(req.r_time, 100)[OFFSET(95)] AS latency_p95,
+  APPROX_QUANTILES(req.r_time, 100)[OFFSET(99)] AS latency_p99
+FROM `prj-onlinesales-prod-01.reporting_mumbai.os_product_ads_request_report` req
+WHERE req.timestamp_utc >= '2026-03-16 12:30:00'
+  AND req.mcid in  ('10064078', '10090579')
+GROUP BY
+  1,2,3,4,5,6
+ORDER BY
+  1,2,3,4,5,6
+
+
+Cache Hit:
+SELECT 
+  i.mcid, 
+  i.date, 
+  i.hour,
+  c.f_pt, 
+  c.c_type, 
+  i.server, 
+  sum(c.rank) as rank, 
+  sum(c.resp) cache_resp, 
+  sum(i.resp) total_resp, 
+  sum(c.resp)* 100 / sum(i.resp) hit_ratio, 
+from 
+  (
+    select 
+      r.mcid, 
+      DATE(r.timestamp_utc) as date, 
+      EXTRACT(HOUR FROM r.timestamp_utc) AS hour, 
+      CASE WHEN r.served_by like '%beta%' THEN 'beta' ELSE 'prod' END as server, 
+      r.c_type, 
+      r.f_pt, 
+      avg(rank) rank, 
+      count(r.mcid) resp, 
+    from 
+      prj-onlinesales-prod-01.reporting.os_product_ads_response_report r
+       
+    where 
+      r.mcid in ('395539', '10086937') 
+      and r.timestamp_utc >= '2026-03-16 13:30:00' 
+    group by 
+      1, 
+      2, 
+      3, 
+      4, 
+      5, 
+      6 
+    order by 
+      1, 
+      2, 
+      3
+  ) c, 
+  (
+    select 
+      r.mcid, 
+      DATE(r.timestamp_utc) as date, 
+      EXTRACT(HOUR FROM r.timestamp_utc) AS hour, 
+      CASE WHEN r.served_by like '%beta%' THEN 'beta' ELSE 'prod' END as server, 
+      r.f_pt, 
+      avg(rank) rank, 
+      count(r.mcid) resp, 
+
+    from 
+      prj-onlinesales-prod-01.reporting.os_product_ads_response_report r 
+       
+    where 
+      r.mcid in ('395539', '10086937') 
+      and r.timestamp_utc >= '2026-03-16 13:30:00' 
+    group by 
+      1, 
+      2, 
+      3, 
+      4, 
+      5
+    order by 
+      1, 
+      2, 
+      3
+  ) i 
+WHERE 
+  i.date = c.date 
+  and i.hour = c.hour 
+  and i.server = c.server 
+  and i.f_pt = c.f_pt 
+  and i.mcid = c.mcid 
+group by 
+  1, 
+  2, 
+  3, 
+  4, 
+  5,
+  6
+order by 
+  1, 
+  2, 
+  3, 
+  4, 
+  5,
+  6
