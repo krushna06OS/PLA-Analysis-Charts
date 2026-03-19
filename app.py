@@ -177,8 +177,8 @@ def generate_rr_charts(df, start_time=None, end_time=None):
     st.subheader("📊 Response Ratio Charts")
 
     # Convert time column
-    df['interval_15_min_str'] = df['interval_15_min'].astype(str)
     df['interval_15_min'] = pd.to_datetime(df['interval_15_min'], utc=True).dt.tz_convert(None)
+    df['interval_15_min_str'] = df['interval_15_min'].dt.strftime('%Y-%m-%d %H:%M')
 
     # Keep only strict 15-minute boundaries
     df = df[
@@ -189,6 +189,13 @@ def generate_rr_charts(df, start_time=None, end_time=None):
 
     if start_time and end_time:
         df = df[(df['interval_15_min'] >= start_time) & (df['interval_15_min'] <= end_time)]
+
+    # Remove exact duplicate rows, then dedupe same timestamp per server to avoid zigzag lines
+    df = df.drop_duplicates()
+    df = df.sort_values('interval_15_min').drop_duplicates(
+        subset=['marketplace_client_id', 'page_type', 'server', 'interval_15_min'],
+        keep='last'
+    )
 
     if df.empty:
         st.warning("No data points found on strict 15-minute boundaries for the selected range.")
@@ -215,7 +222,7 @@ def generate_rr_charts(df, start_time=None, end_time=None):
                 server_df = server_df.sort_values('interval_15_min')
 
                 plt.plot(
-                    server_df['interval_15_min_str'],
+                    server_df['interval_15_min'],
                     server_df['response_ratio'],
                     marker='o',
                     label=server
@@ -243,8 +250,8 @@ def generate_rr_charts(df, start_time=None, end_time=None):
 def generate_latency_charts(df, start_time=None, end_time=None):
     st.subheader("⏱️ Latency Charts (p95 / p99)")
 
-    df['interval_15_min_str'] = df['interval_15_min'].astype(str)
     df['interval_15_min'] = pd.to_datetime(df['interval_15_min'], utc=True).dt.tz_convert(None)
+    df['interval_15_min_str'] = df['interval_15_min'].dt.strftime('%Y-%m-%d %H:%M')
 
     # Keep only strict 15-minute boundaries
     df = df[
@@ -255,6 +262,13 @@ def generate_latency_charts(df, start_time=None, end_time=None):
 
     if start_time and end_time:
         df = df[(df['interval_15_min'] >= start_time) & (df['interval_15_min'] <= end_time)]
+
+    # Remove exact duplicate rows, then dedupe same timestamp per server to avoid zigzag lines
+    df = df.drop_duplicates()
+    df = df.sort_values('interval_15_min').drop_duplicates(
+        subset=['marketplace_client_id', 'f_pt', 'server', 'interval_15_min'],
+        keep='last'
+    )
 
     if df.empty:
         st.warning("No data points found on strict 15-minute boundaries for the selected range.")
@@ -275,13 +289,13 @@ def generate_latency_charts(df, start_time=None, end_time=None):
             for server in subset['server'].unique():
                 server_df = subset[subset['server'] == server].sort_values('interval_15_min')
                 plt.plot(
-                    server_df['interval_15_min_str'],
+                    server_df['interval_15_min'],
                     server_df['latency_p95'],
                     marker='o',
                     label=f"{server} p95"
                 )
                 plt.plot(
-                    server_df['interval_15_min_str'],
+                    server_df['interval_15_min'],
                     server_df['latency_p99'],
                     marker='x',
                     linestyle='--',
@@ -311,14 +325,20 @@ def generate_cache_hit_charts(df, start_time=None, end_time=None):
     st.subheader("🧩 Cache Hit Charts (Hit Ratio)")
 
     # Build a timestamp from date + hour
-    df['date_str'] = df['date'].astype(str)
     df['date'] = pd.to_datetime(df['date'])
     df['hour'] = pd.to_numeric(df['hour'], errors='coerce').fillna(0).astype(int)
     df['timestamp'] = df['date'] + pd.to_timedelta(df['hour'], unit='h')
-    df['timestamp_str'] = df['date_str'] + " " + df['hour'].astype(str).str.zfill(2) + ":00:00"
+    df['timestamp_str'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
 
     if start_time and end_time:
         df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+
+    # Remove exact duplicate rows, then dedupe same timestamp per server to avoid zigzag lines
+    df = df.drop_duplicates()
+    df = df.sort_values('timestamp').drop_duplicates(
+        subset=['mcid', 'f_pt', 'c_type', 'server', 'timestamp'],
+        keep='last'
+    )
 
     if df.empty:
         st.warning("No data points found for the selected range.")
@@ -347,7 +367,7 @@ def generate_cache_hit_charts(df, start_time=None, end_time=None):
                 for server in subset['server'].unique():
                     server_df = subset[subset['server'] == server].sort_values('timestamp')
                     plt.plot(
-                        server_df['timestamp_str'],
+                        server_df['timestamp'],
                         server_df['hit_ratio'],
                         marker='o',
                         label=server
@@ -405,6 +425,7 @@ if uploaded_file:
 
         try:
             df = load_excel_sheet(file_bytes, sheet_name)
+            df = df.drop_duplicates()
 
             st.write("Preview Data:", df.head())
 
